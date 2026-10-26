@@ -1,0 +1,174 @@
+---
+name: carats-client
+description: Use this skill when coding client side logic, pages or components for carats framework
+---
+
+Prerequisites:
+- carats-essentials skill
+Dependencies:
+- "@carats/hooks": to use hooks
+- "@carats/render": to define facets
+- "@carats/url": to handle urls (peer dependency)
+- "@carats/core": to handle core functionality
+- "@carats/csr": to handle client side rendering
+- "jjsx": to handle jsx (peer dependency)
+- "vite": to handle build & resolution (peer dependency)
+
+
+Client coding is very crucial for carats.
+- There must be a proper folder at exact location src/client
+- There must be a facets.cara.ts file in src/client folder
+- There must be a entrypoint.ts file in src/client folder
+- There must be a index.html file in src/client folder which is compatible with vite html template
+- HTML template must contain <!--app-head--> inside head tag and <div id="app"><!--app-html--></div> inside body tag (including html comments)
+- HTML template must contain <script type="module" src="/entrypoint.ts"></script> before closing body tag
+- HTML template can contain static head tags but try to avoid conflict with components head property. A page component can provide dynamic head tags via this.head assignment (never works with arrow functions)
+- Sample component that provides dynamic tags:
+```tsx
+import { CaratsComponent } from '@carats/render';
+export default function Home(this: CaratsComponent) {
+    this.head = <>
+        <title>Home</title>
+        <meta name="description" content="Home page for carats" />
+    </>;
+    return <div>Home</div>;
+}
+```
+- There must be a vite-env.d.ts file in src/client folder with exact content: "/// <reference types="vite/client" />"
+
+Facets are defined in facets.cara.ts file by defineFacets function from @carats/render and must be default exported.
+Sample facet definition:
+```typescript
+import { defineFacets } from '@carats/render';
+import ErrorPage from './pages/_error';
+import NotFound from './pages/_not_found';
+import Home from './pages/home';
+import Profile from './pages/profile';
+
+export default defineFacets({
+    routes: {
+        '/': Home,
+        '/profile/:id': Profile
+    },
+    suspense: {
+        loading: () => 'Loading...',
+        error: ErrorPage,
+        notFound: NotFound
+    },
+    inAppRouting: true
+});
+```
+
+routes is a map of routes to carats page components. Each route can have parameters like :id.
+suspense is a map of suspense states to carats components.
+inAppRouting is a boolean value that indicates whether the app should use in-app routing or not. in app routing provides a navigation similar to SPA.
+after defining facets, you must mount them in src/client/entrypoint.ts file. Sample entrypoint file:
+```typescript
+import { mount, clientRender } from '@carats/csr';
+import facets from './facets.cara';
+
+mount(facets);
+clientRender(); // required when in-app routing is enabled
+```
+
+Carats components are simplified react components:
+- Only pure html attributes are supported. That means you can not pass an arrow function to onclick attribute. or onsubmit or a similar attribute.
+- Html attributes considered as strings generally
+- Props, .defaultProps, children are supported
+A sample carats component looks like this:
+```tsx
+import './_layout.sass';
+
+export default function Layout(props: JSX.ComponentProps) {
+    return (
+        <>
+            <header>Hello World</header>
+            <main>{props.children}</main>
+            <footer>Carats</footer>
+        </>
+    )
+}
+```
+Carats components must be .tsx files.
+Carats components can import other components and files supported by Vite (like sass, css, json, etc.)
+Carats commponents can be burnished when wrapped by Burnish function from @carats/render.
+Burnished means this component needs server side props. And carats framework will automatically fetch it from its culet. (Culets are defined by carat-server skill and they are matched with burnished components if their routes are equal)
+Sample burnished component:
+```tsx
+import { Burnish } from '@carats/render';
+export default Burnish<User>((user) => <h1>Hello {user.name}</h1>);
+```
+Burnished components needs to be defined with function keyword only when this.head assignment is needed. This type is automatically inferred as CaratsComponent for Burnished function components (not the arrow ones).
+```tsx
+import { Burnish } from '@carats/render';
+export default Burnish<User>(function (user){
+    this.head = <title>{user.name} - Profile Page</title>;
+    return <h1>Hello {user.name}</h1>
+});
+```
+Carats framework automatically caches the recent culet. If a component needs to fetch fresh data on every render, Burnish function accepts a second argument BurnishOptions. Setting `recast` property of options to true will trigger refetch on every render.
+Here is the full @carats/render interface for better understanding:
+```typescript
+interface CaratsComponent<T = any> extends JSX.FunctionComponent<T> {
+    defaultProps?: T;
+    head?: string;
+    burnished?: boolean;
+    recast?: boolean;
+}
+interface Facets {
+    inAppRouting?: boolean;
+    routes: Record<string, CaratsComponent>;
+    suspense: {
+        loading: () => JSX.Element;
+        error: (error: Error) => JSX.Element;
+        notFound: () => JSX.Element;
+    };
+}
+interface PartialFacets {
+    inAppRouting?: boolean;
+    routes?: Record<string, CaratsComponent>;
+    suspense?: Partial<Facets['suspense']>;
+}
+declare function defineFacets(facets: PartialFacets): Facets;
+interface PageComponentResult {
+    component: CaratsComponent<any>;
+    params: Record<string, string>;
+    route: string;
+}
+declare function getPageComponent(this: Facets, url: string): PageComponentResult;
+declare function renderPage<T = any>(this: Facets, component: CaratsComponent<T>, props: T): Promise<string>;
+interface BurnishOptions {
+    recast?: boolean; // prevents props being cached
+}
+declare function Burnish<T = any>(component: CaratsComponent<T>, options?: BurnishOptions): CaratsComponent<T>;
+
+export { Burnish, type CaratsComponent, type Facets, type PageComponentResult, defineFacets, getPageComponent, renderPage };
+```
+
+Facets are so crucial, they will be used on both client and server entrypoints.
+There must be a vite.config.client.ts at root, sample vite config for client:
+```typescript
+import { defineConfig } from 'vite'
+import path from 'path'
+
+export default defineConfig({
+  publicDir: path.resolve(import.meta.dirname, 'public'),
+  root: path.resolve(import.meta.dirname, 'src/client'),
+  base: '/',
+  appType: 'custom',
+  server: {
+    middlewareMode: true
+  },
+  build: {
+    outDir: path.resolve(import.meta.dirname, 'dist/client'),
+    emptyOutDir: true,
+    manifest: true,
+    minify: true,
+    rollupOptions: {
+      treeshake: true
+    }
+  }
+})
+```
+
+- You can use version "latest" for all dependencies if no version is specified (e.g. you cant use latest if express 5 is required)
