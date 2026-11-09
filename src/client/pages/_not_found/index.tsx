@@ -1,7 +1,8 @@
+import { Status } from "@carats/render"
 import Layout from "../_layout"
 import './notfound.sass'
 
-export default function NotFound() {
+export default Status(404)(function NotFound() {
     return (
         <Layout>
             <section class="notfound-page container">
@@ -12,4 +13,4 @@ export default function NotFound() {
             </section>
         </Layout>
     )
-}
+})

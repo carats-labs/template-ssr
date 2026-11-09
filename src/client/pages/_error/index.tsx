@@ -1,7 +1,8 @@
+import { Status } from "@carats/render";
 import Layout from "../_layout";
 import './error.sass';
 
-export default function ErrorPage(error: Error) {
+export default Status(500)(function ErrorPage(error: Error) {
     return (
         <Layout>
             <section class="error-page container">
@@ -13,4 +14,4 @@ export default function ErrorPage(error: Error) {
             </section>
         </Layout>
     );
-}
+})
